@@ -95,11 +95,11 @@ Building a modern, responsive desktop web version of "Flip 7" card game with rea
 - [x] Implement player ready status indicators
 
 ### Task 3.3: Game Board Layout
-- [ ] Design main game board layout
-- [ ] Create deck visualization
-- [ ] Implement player hand display
-- [ ] Add other players' status display
-- [ ] Create game action buttons (Hit/Stay)
+- [x] Design main game board layout
+- [x] Create deck visualization
+- [x] Implement player hand display
+- [x] Add other players' status display
+- [x] Create game action buttons (Hit/Stay)
 
 ### Task 3.4: Card Visual Components
 - [ ] Design and implement card visual design
