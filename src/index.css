@@ -1,0 +1,416 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+html {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+body {
+  background: linear-gradient(to bottom right, #0f172a, #581c87, #0f172a);
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Animated Background */
+.animated-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.animated-bg::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    45deg,
+    #0f172a 0%,
+    #581c87 25%,
+    #7c3aed 50%,
+    #581c87 75%,
+    #0f172a 100%
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 8s ease-in-out infinite;
+  z-index: -2;
+}
+
+.animated-bg::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+              radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+              radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.2) 0%, transparent 50%);
+  animation: glowShift 12s ease-in-out infinite;
+  z-index: -1;
+}
+
+/* Floating Particles */
+.particles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  animation: float 6s ease-in-out infinite;
+}
+
+.particle:nth-child(1) {
+  left: 10%;
+  animation-delay: 0s;
+  animation-duration: 8s;
+}
+
+.particle:nth-child(2) {
+  left: 20%;
+  animation-delay: 1s;
+  animation-duration: 10s;
+}
+
+.particle:nth-child(3) {
+  left: 30%;
+  animation-delay: 2s;
+  animation-duration: 7s;
+}
+
+.particle:nth-child(4) {
+  left: 40%;
+  animation-delay: 3s;
+  animation-duration: 9s;
+}
+
+.particle:nth-child(5) {
+  left: 50%;
+  animation-delay: 4s;
+  animation-duration: 6s;
+}
+
+.particle:nth-child(6) {
+  left: 60%;
+  animation-delay: 5s;
+  animation-duration: 11s;
+}
+
+.particle:nth-child(7) {
+  left: 70%;
+  animation-delay: 6s;
+  animation-duration: 8s;
+}
+
+.particle:nth-child(8) {
+  left: 80%;
+  animation-delay: 7s;
+  animation-duration: 9s;
+}
+
+.particle:nth-child(9) {
+  left: 90%;
+  animation-delay: 8s;
+  animation-duration: 7s;
+}
+
+.particle:nth-child(10) {
+  left: 15%;
+  animation-delay: 9s;
+  animation-duration: 10s;
+}
+
+.particle:nth-child(11) {
+  left: 25%;
+  animation-delay: 10s;
+  animation-duration: 8s;
+}
+
+.particle:nth-child(12) {
+  left: 35%;
+  animation-delay: 11s;
+  animation-duration: 9s;
+}
+
+.particle:nth-child(13) {
+  left: 45%;
+  animation-delay: 12s;
+  animation-duration: 7s;
+}
+
+.particle:nth-child(14) {
+  left: 55%;
+  animation-delay: 13s;
+  animation-duration: 11s;
+}
+
+.particle:nth-child(15) {
+  left: 65%;
+  animation-delay: 14s;
+  animation-duration: 8s;
+}
+
+.particle:nth-child(16) {
+  left: 75%;
+  animation-delay: 15s;
+  animation-duration: 10s;
+}
+
+.particle:nth-child(17) {
+  left: 85%;
+  animation-delay: 16s;
+  animation-duration: 9s;
+}
+
+.particle:nth-child(18) {
+  left: 95%;
+  animation-delay: 17s;
+  animation-duration: 7s;
+}
+
+.particle:nth-child(19) {
+  left: 5%;
+  animation-delay: 18s;
+  animation-duration: 11s;
+}
+
+.particle:nth-child(20) {
+  left: 35%;
+  animation-delay: 19s;
+  animation-duration: 8s;
+}
+
+/* Special Flip 7 Title Styling */
+.game-title {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57, #ff9ff3, #54a0ff);
+  background-size: 400% 400%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: titleGradient 4s ease-in-out infinite, titleGlow 2s ease-in-out infinite alternate;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  position: relative;
+  display: inline-block;
+}
+
+.game-title::before {
+  content: 'Flip 7';
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57, #ff9ff3, #54a0ff);
+  background-size: 400% 400%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: titleGradient 4s ease-in-out infinite;
+  filter: blur(8px);
+  opacity: 0.7;
+  z-index: -1;
+}
+
+.game-title::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120%;
+  height: 120%;
+  background: radial-gradient(circle, rgba(255, 107, 107, 0.2) 0%, transparent 70%);
+  animation: titlePulse 3s ease-in-out infinite;
+  z-index: -2;
+}
+
+.card {
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  border: 2px solid #e5e7eb;
+}
+
+.card-number {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #1f2937;
+}
+
+.card-action {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.card-modifier {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.btn-primary {
+  background-color: #dc2626;
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #b91c1c;
+}
+
+.btn-secondary {
+  background-color: #0284c7;
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: #0369a1;
+}
+
+.btn-danger {
+  background-color: #dc2626;
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+.btn-success {
+  background-color: #16a34a;
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-success:hover {
+  background-color: #15803d;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes glowShift {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(100vh) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes titleGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes titleGlow {
+  0% {
+    filter: drop-shadow(0 0 10px rgba(255, 107, 107, 0.5)) 
+            drop-shadow(0 0 20px rgba(78, 205, 196, 0.3))
+            drop-shadow(0 0 30px rgba(69, 183, 209, 0.2));
+  }
+  100% {
+    filter: drop-shadow(0 0 20px rgba(255, 107, 107, 0.8)) 
+            drop-shadow(0 0 40px rgba(78, 205, 196, 0.5))
+            drop-shadow(0 0 60px rgba(69, 183, 209, 0.3));
+  }
+}
+
+@keyframes titlePulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
