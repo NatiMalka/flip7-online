@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Room rules
+    match /rooms/{roomCode} {
+      // Allow read access to anyone (for joining rooms)
+      allow read: if true;
+      
+      // Allow create if room code is valid and data is correct
+      allow create: if 
+        // Room code must be 6 characters alphanumeric
+        roomCode.matches('^[A-Z0-9]{6}$') &&
+        // Must have valid room data
+        resource.data.code == roomCode &&
+        resource.data.host is string &&
+        resource.data.players is map &&
+        resource.data.round is number &&
+        resource.data.round >= 0 &&
+        resource.data.state in ['waiting', 'playing', 'roundEnd', 'gameOver'] &&
+        resource.data.createdAt is timestamp;
+      
+      // Allow update if user is in the room
+      allow update: if 
+        // Room code must be valid
+        roomCode.matches('^[A-Z0-9]{6}$') &&
+        // Must have valid room data
+        request.resource.data.code == roomCode &&
+        request.resource.data.host is string &&
+        request.resource.data.players is map &&
+        request.resource.data.round is number &&
+        request.resource.data.round >= 0 &&
+        request.resource.data.state in ['waiting', 'playing', 'roundEnd', 'gameOver'];
+      
+      // Allow delete if room is empty or old
+      allow delete: if 
+        // Room is empty (no players)
+        resource.data.players.size() == 0 ||
+        // Room is old (created more than 24 hours ago)
+        (resource.data.createdAt is timestamp && 
+         request.time > resource.data.createdAt + duration.value(24, 'h'));
+    }
+    
+    // Player subcollection rules (if we use subcollections)
+    match /rooms/{roomCode}/players/{playerId} {
+      allow read, write: if 
+        // Room must exist
+        exists(/databases/$(database)/documents/rooms/$(roomCode)) &&
+        // Player must be in the room
+        exists(/databases/$(database)/documents/rooms/$(roomCode)/players/$(playerId));
+    }
+    
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 

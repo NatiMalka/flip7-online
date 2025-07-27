@@ -1,4 +1,4 @@
-import type { Card, CardType, ActionCardType, ModifierCardType, CardSuit } from '../types';
+import type { Card, CardType, ActionCardType, ModifierCardType } from '../types';
 
 // Card frequency distribution according to official Flip 7 rules
 const CARD_DISTRIBUTION = {
@@ -35,9 +35,6 @@ const CARD_DISTRIBUTION = {
   }
 };
 
-// Card suits for number cards
-const SUITS: CardSuit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
-
 /**
  * Generate a complete deck of Flip 7 cards
  */
@@ -45,16 +42,14 @@ export function generateDeck(): Card[] {
   const deck: Card[] = [];
   let cardId = 1;
 
-  // Generate number cards (1-7)
+  // Generate number cards (0-12)
   for (const [value, count] of Object.entries(CARD_DISTRIBUTION.number)) {
     const numValue = parseInt(value);
     for (let i = 0; i < count; i++) {
-      const suit = SUITS[i % SUITS.length];
       deck.push({
         id: `card_${cardId++}`,
         type: 'number',
         value: numValue,
-        suit,
         isFlipped: false,
         isVisible: false,
       });
@@ -337,25 +332,22 @@ export function calculateHandScore(cards: Card[]): {
 }
 
 /**
- * Check if a hand is busted (sum > 7)
+ * Check if a hand is busted (has duplicate number cards)
  */
 export function isHandBusted(cards: Card[]): boolean {
-  const { score, hasFlip7 } = calculateHandScore(cards);
+  const { hasFlip7 } = calculateHandScore(cards);
   
   // If you have Flip 7, you can't bust
   if (hasFlip7) {
     return false;
   }
 
-  // Check if the sum of number cards is greater than 7
-  let numberSum = 0;
-  for (const card of cards) {
-    if (card.type === 'number' && card.value) {
-      numberSum += card.value;
-    }
-  }
-
-  return numberSum > 7;
+  // Check for duplicate number cards
+  const numberCards = cards.filter(card => card.type === 'number');
+  const numbers = numberCards.map(card => card.value);
+  const uniqueNumbers = new Set(numbers);
+  
+  return numbers.length !== uniqueNumbers.size;
 }
 
 /**
@@ -365,7 +357,6 @@ export function getCardDisplayInfo(card: Card): {
   displayName: string;
   description: string;
   color: string;
-  suit?: string;
   isSpecial: boolean;
 } {
   const cardInfo = detectCardType(card);
@@ -374,7 +365,6 @@ export function getCardDisplayInfo(card: Card): {
     displayName: cardInfo.displayName,
     description: cardInfo.description,
     color: cardInfo.color,
-    suit: card.suit,
     isSpecial: card.type !== 'number' || (card.value === 7),
   };
 }

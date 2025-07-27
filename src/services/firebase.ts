@@ -3,14 +3,15 @@ import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import type { FirebaseConfig } from '../types';
 
-// Firebase configuration - you'll need to replace these with your actual Firebase project config
+// Firebase configuration
 const firebaseConfig: FirebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  apiKey: "AIzaSyAZM1oIbm6XtcOz7NUzB8DcmZGC0HkDjq4",
+  authDomain: "flip7-game.firebaseapp.com",
+  projectId: "flip7-game",
+  storageBucket: "flip7-game.firebasestorage.app",
+  messagingSenderId: "42472083580",
+  appId: "1:42472083580:web:239735747e4890c35b79f9",
+  measurementId: "G-0DK5QW38EC"
 };
 
 // Initialize Firebase

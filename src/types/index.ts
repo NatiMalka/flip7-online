@@ -1,8 +1,6 @@
 // Card Types
 export type CardType = 'number' | 'action' | 'modifier';
 
-export type CardSuit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
-
 export type ActionCardType = 'freeze' | 'flipThree' | 'secondChance';
 
 export type ModifierCardType = 'plus2' | 'plus4' | 'plus6' | 'plus8' | 'plus10' | 'x2';
@@ -10,12 +8,11 @@ export type ModifierCardType = 'plus2' | 'plus4' | 'plus6' | 'plus8' | 'plus10' 
 export interface Card {
   id: string;
   type: CardType;
-  value?: number; // For number cards (1-7)
+  value?: number; // For number cards (0-12)
   action?: ActionCardType; // For action cards
   modifier?: ModifierCardType; // For modifier cards
-  suit?: CardSuit;
   isFlipped: boolean;
-  isVisible: boolean;
+  isVisible: false;
 }
 
 // Player Types
@@ -31,6 +28,8 @@ export interface Player {
   joinedAt: Date;
   isHost: boolean;
   hasFlip7: boolean;
+  isConnected: boolean;
+  lastSeen: Date;
 }
 
 // Game State Types
@@ -58,6 +57,7 @@ export interface Room {
   createdAt: Date;
   maxRounds: number;
   isSoloMode: boolean;
+  lastActivity: Date;
 }
 
 // Game Actions
@@ -77,6 +77,7 @@ export interface FirebaseConfig {
   storageBucket: string;
   messagingSenderId: string;
   appId: string;
+  measurementId?: string;
 }
 
 // UI Types
@@ -95,6 +96,7 @@ export interface ButtonProps {
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
+  type?: 'button' | 'submit' | 'reset';
 }
 
 // Animation Types
@@ -104,7 +106,7 @@ export type AnimationType = 'flip' | 'shake' | 'bounce' | 'slide';
 export interface GameError {
   code: string;
   message: string;
-  details?: any;
+  details?: unknown;
 }
 
 // Solo Mode Types

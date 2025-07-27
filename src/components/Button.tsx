@@ -9,6 +9,7 @@ const Button: React.FC<ButtonProps> = ({
   children,
   className = '',
   style,
+  type = 'button',
 }) => {
   const baseStyles: React.CSSProperties = {
     fontWeight: '600',
@@ -87,6 +88,7 @@ const Button: React.FC<ButtonProps> = ({
   
   return (
     <button
+      type={type}
       style={buttonStyles}
       disabled={disabled}
       onClick={onClick}
