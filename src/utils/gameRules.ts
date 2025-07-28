@@ -1,10 +1,5 @@
-import type { 
-  Card, 
-  Player, 
-  PlayerStatus,
-  Room
-} from '../types';
-import { calculateHandScore } from './cardSystem';
+import type { Room, Player, Card, PlayerStatus, GameState } from '../types';
+import { calculateHandScore, dealOneCard, createAndShuffleDeck } from './cardSystem';
 
 // Game Constants
 export const FLIP_7_BONUS = 15;
@@ -19,10 +14,11 @@ export interface GameActionResult {
   message: string;
   updatedRoom?: Partial<Room>;
   effects?: GameEffect[];
+  requiresTargetSelection?: boolean; // Added for Freeze
 }
 
 export interface GameEffect {
-  type: 'freeze' | 'flipThree' | 'secondChance' | 'bust' | 'flip7' | 'stay';
+  type: 'freeze' | 'flipThree' | 'secondChance' | 'bust' | 'flip7' | 'stay' | 'gameOver';
   targetPlayerId?: string;
   sourcePlayerId?: string;
   cards?: Card[];
@@ -44,7 +40,8 @@ export interface RoundState {
  * Initialize a new round
  */
 export function initializeRound(room: Room): Room {
-  const shuffledDeck = shuffleDeck([...room.deck, ...room.discardPile]);
+  // Create a fresh shuffled deck for the new round
+  const shuffledDeck = createAndShuffleDeck();
   
   // Deal one card to each player
   const updatedPlayers: Record<string, Player> = {};
@@ -59,7 +56,11 @@ export function initializeRound(room: Room): Room {
         ...player,
         hand: [card],
         status: 'active',
+        roundScore: 0, // Reset round score for new round
         hasFlip7: false,
+        // Clear freeze status if player was frozen and should be unfrozen this round
+        isFrozen: player.frozenUntilRound && room.round + 1 < player.frozenUntilRound ? player.isFrozen : false,
+        frozenUntilRound: player.frozenUntilRound && room.round + 1 < player.frozenUntilRound ? player.frozenUntilRound : undefined,
       };
     }
   }
@@ -89,11 +90,11 @@ export function hasFlip7(cards: Card[]): boolean {
 }
 
 /**
- * Check if a player has busted (drew a duplicate number)
+ * Check if a player has busted (drew a duplicate number card)
  */
 export function hasBusted(cards: Card[]): boolean {
   const numberCards = cards.filter(card => card.type === 'number');
-  const numbers = numberCards.map(card => card.value);
+  const numbers = numberCards.map(card => card.value).filter((value): value is number => value !== undefined);
   const uniqueNumbers = new Set(numbers);
   return numbers.length !== uniqueNumbers.size;
 }
@@ -128,16 +129,28 @@ export function applySecondChance(cards: Card[]): {
     seen.add(num);
   }
 
-  // Remove the duplicate and Second Chance card
-  const newCards = cards.filter(card => 
-    !(card.type === 'number' && card.value === duplicateNumber) &&
-    !(card.type === 'action' && card.action === 'secondChance')
-  );
+  // Remove only ONE duplicate card and the Second Chance card
+  const newCards: Card[] = [];
+  const removedCards: Card[] = [];
+  let duplicateRemoved = false;
+  let secondChanceRemoved = false;
 
-  const removedCards = cards.filter(card => 
-    (card.type === 'number' && card.value === duplicateNumber) ||
-    (card.type === 'action' && card.action === 'secondChance')
-  );
+  for (const card of cards) {
+    // Remove Second Chance card
+    if (card.type === 'action' && card.action === 'secondChance' && !secondChanceRemoved) {
+      removedCards.push(card);
+      secondChanceRemoved = true;
+    }
+    // Remove only ONE duplicate number card
+    else if (card.type === 'number' && card.value === duplicateNumber && !duplicateRemoved) {
+      removedCards.push(card);
+      duplicateRemoved = true;
+    }
+    // Keep all other cards
+    else {
+      newCards.push(card);
+    }
+  }
 
   return { newCards, removedCards, duplicateNumber };
 }
@@ -149,72 +162,127 @@ export function processHitAction(
   room: Room, 
   playerId: string
 ): GameActionResult {
-  const player = room.players[playerId];
-  
-  if (!player || player.status !== 'active') {
-    return {
-      success: false,
-      message: 'Player cannot hit at this time',
-    };
-  }
+  console.log('🔄 processHitAction called:', {
+    playerId,
+    currentTurn: room.currentTurn,
+    isMyTurn: room.currentTurn === playerId,
+    gameState: room.state,
+    deckLength: room.deck.length
+  });
 
+  // Validate it's the player's turn
   if (room.currentTurn !== playerId) {
+    console.error('❌ Not player\'s turn');
     return {
       success: false,
-      message: 'Not your turn',
+      message: "It's not your turn",
     };
   }
 
-  if (room.deck.length === 0) {
+  // Validate game state
+  if (room.state !== 'playing') {
+    console.error('❌ Game not in playing state');
     return {
       success: false,
-      message: 'No cards left in deck',
+      message: "Game is not in progress",
+    };
+  }
+
+  const player = room.players[playerId];
+  if (!player) {
+    console.error('❌ Player not found');
+    return {
+      success: false,
+      message: "Player not found",
+    };
+  }
+
+  // Validate player status
+  if (player.status !== 'active') {
+    console.error('❌ Player not active:', player.status);
+    return {
+      success: false,
+      message: "You cannot hit - you are not active",
+    };
+  }
+
+  // Check if player is frozen
+  if (player.isFrozen && player.frozenUntilRound && room.round < player.frozenUntilRound) {
+    console.log('❄️ Player is frozen, skipping turn');
+    // Keep frozen status and move to next player (don't clear until round ends)
+    const updatedPlayers = { ...room.players };
+
+    const nextPlayerId = getNextActivePlayer(updatedPlayers, playerId, room.round);
+    console.log('🔄 Next player after frozen skip:', nextPlayerId);
+
+    return {
+      success: true,
+      message: `${player.name} is frozen and skipped their turn`,
+      updatedRoom: {
+        ...room,
+        players: updatedPlayers,
+        currentTurn: nextPlayerId,
+      },
+      effects: [{
+        type: 'freeze',
+        targetPlayerId: playerId,
+        message: 'Player is frozen and skipped turn',
+      }],
     };
   }
 
   // Deal a card
-  const { card, remainingDeck } = dealOneCard(room.deck);
-  const newHand = [...player.hand, card];
-  
+  const { card: newCard, remainingDeck } = dealOneCard(room.deck);
+  console.log('🎴 Dealt card:', newCard);
+
+  if (!newCard) {
+    console.error('❌ No cards left in deck');
+    return {
+      success: false,
+      message: "No cards left in deck",
+    };
+  }
+
+  // Add card to player's hand
+  const newHand = [...player.hand, newCard];
+  console.log('🖐️ New hand:', newHand.map(card => card.id));
+
   // Check for Flip 7
   if (hasFlip7(newHand)) {
+    console.log('🎉 Flip 7 detected!');
     return handleFlip7(room, playerId, newHand);
   }
 
   // Check for bust
   if (hasBusted(newHand)) {
-    if (canUseSecondChance(newHand)) {
-      return handleSecondChance(room, playerId, newHand, remainingDeck);
-    } else {
-      return handleBust(room, playerId, newHand, remainingDeck);
-    }
+    console.log('💥 Bust detected!');
+    return handleBust(room, playerId, newHand, remainingDeck);
   }
 
-  // Check for Action cards that need immediate resolution
-  if (card.type === 'action') {
-    return handleActionCard(room, playerId, card, newHand, remainingDeck);
+  // Check for action card
+  if (newCard.type === 'action') {
+    console.log('⚡ Action card detected:', newCard.id);
+    return handleActionCard(room, playerId, newCard, newHand, remainingDeck);
   }
 
-  // Update player and move to next turn
-  const updatedPlayers = {
-    ...room.players,
-    [playerId]: {
-      ...player,
-      hand: newHand,
-      hasFlip7: hasFlip7(newHand),
-    },
+  // Regular number card - update hand and move to next player
+  const updatedPlayers = { ...room.players };
+  updatedPlayers[playerId] = {
+    ...player,
+    hand: newHand,
   };
 
-  const nextTurn = getNextActivePlayer(updatedPlayers, playerId);
+  const nextPlayerId = getNextActivePlayer(updatedPlayers, playerId, room.round);
+  console.log('🔄 Next player after regular hit:', nextPlayerId);
 
   return {
     success: true,
-    message: `Drew ${getCardDisplayName(card)}`,
+    message: `${player.name} drew ${newCard.id}`,
     updatedRoom: {
       ...room,
       players: updatedPlayers,
       deck: remainingDeck,
-      currentTurn: nextTurn,
+      currentTurn: nextPlayerId,
     },
   };
 }
@@ -242,20 +310,21 @@ export function processStayAction(
     };
   }
 
-  // Calculate current score
+  // Calculate current round score
   const { score } = calculateHandScore(player.hand);
   
-  // Update player status to stayed
+  // Update player status to stayed and track round score
   const updatedPlayers: Record<string, Player> = {
     ...room.players,
     [playerId]: {
       ...player,
       status: 'stayed' as PlayerStatus,
-      score: player.score + score,
+      roundScore: score, // Track round score separately
+      // Don't add to total score yet - that happens at round end
     },
   };
 
-  const nextTurn = getNextActivePlayer(updatedPlayers, playerId);
+  const nextTurn = getNextActivePlayer(updatedPlayers, playerId, room.round);
 
   // Check if round should end
   if (shouldEndRound(updatedPlayers)) {
@@ -288,7 +357,8 @@ function handleFlip7(
 ): GameActionResult {
   const player = room.players[playerId];
   const { score } = calculateHandScore(newHand);
-  const totalScore = score + FLIP_7_BONUS;
+  const flip7Bonus = 15; // Flip 7 bonus
+  const roundScore = score + flip7Bonus;
 
   const updatedPlayers: Record<string, Player> = {
     ...room.players,
@@ -296,7 +366,8 @@ function handleFlip7(
       ...player,
       hand: newHand,
       status: 'stayed' as PlayerStatus,
-      score: player.score + totalScore,
+      roundScore: roundScore, // Track round score with Flip 7 bonus
+      totalScore: player.totalScore + roundScore, // Add to total score immediately for Flip 7
       hasFlip7: true,
     },
   };
@@ -316,17 +387,23 @@ function handleBust(
 ): GameActionResult {
   const player = room.players[playerId];
 
+  // Check if player has Second Chance card to avoid bust
+  if (canUseSecondChance(newHand)) {
+    console.log('🎴 Player has Second Chance, auto-using to avoid bust');
+    return handleSecondChance(room, playerId, newHand, remainingDeck);
+  }
+
   const updatedPlayers: Record<string, Player> = {
     ...room.players,
     [playerId]: {
       ...player,
       hand: newHand,
       status: 'busted' as PlayerStatus,
-      score: player.score, // No points for busted round
+      roundScore: 0, // No points for busted round
     },
   };
 
-  const nextTurn = getNextActivePlayer(updatedPlayers, playerId);
+  const nextTurn = getNextActivePlayer(updatedPlayers, playerId, room.round);
 
   // Check if round should end
   if (shouldEndRound(updatedPlayers)) {
@@ -370,7 +447,7 @@ function handleSecondChance(
     },
   };
 
-  const nextTurn = getNextActivePlayer(updatedPlayers, playerId);
+  const nextTurn = getNextActivePlayer(updatedPlayers, playerId, room.round);
 
   return {
     success: true,
@@ -404,10 +481,54 @@ function handleActionCard(
 
   switch (card.action) {
     case 'freeze':
-      return handleFreezeAction(room, playerId, newHand, remainingDeck);
+      // Freeze card requires player selection - return special result
+      return {
+        success: true,
+        message: 'Choose a player to freeze',
+        updatedRoom: {
+          ...room,
+          players: {
+            ...room.players,
+            [playerId]: {
+              ...player,
+              hand: newHand,
+            },
+          },
+          deck: remainingDeck,
+          currentTurn: playerId, // Keep turn with current player for selection
+        },
+        effects: [{
+          type: 'freeze',
+          sourcePlayerId: playerId,
+          message: `${player.name} drew Freeze card - choose target`,
+        }],
+        requiresTargetSelection: true,
+      };
     
     case 'flipThree':
-      return handleFlipThreeAction(room, playerId, newHand, remainingDeck);
+      // Flip Three card requires player selection - return special result
+      return {
+        success: true,
+        message: 'Choose a player to flip three cards',
+        updatedRoom: {
+          ...room,
+          players: {
+            ...room.players,
+            [playerId]: {
+              ...player,
+              hand: newHand,
+            },
+          },
+          deck: remainingDeck,
+          currentTurn: playerId, // Keep turn with current player for selection
+        },
+        effects: [{
+          type: 'flipThree',
+          sourcePlayerId: playerId,
+          message: `${player.name} drew Flip Three card - choose target`,
+        }],
+        requiresTargetSelection: true,
+      };
     
     case 'secondChance': {
       // Second Chance is held for later use
@@ -419,7 +540,7 @@ function handleActionCard(
         },
       };
 
-      const nextTurn = getNextActivePlayer(updatedPlayers, playerId);
+      const nextTurn = getNextActivePlayer(updatedPlayers, playerId, room.round);
 
       return {
         success: true,
@@ -430,6 +551,11 @@ function handleActionCard(
           deck: remainingDeck,
           currentTurn: nextTurn,
         },
+        effects: [{
+          type: 'secondChance',
+          targetPlayerId: playerId,
+          message: `${player.name} drew Second Chance card`,
+        }],
       };
     }
     
@@ -442,33 +568,33 @@ function handleActionCard(
 }
 
 /**
- * Handle Freeze action card
+ * Handle Freeze action card with target selection
  */
-function handleFreezeAction(
+export function handleFreezeAction(
   room: Room,
   playerId: string,
+  targetPlayerId: string,
   newHand: Card[],
   remainingDeck: Card[]
 ): GameActionResult {
   const player = room.players[playerId];
-  
-  // Find target player (next player in turn order)
-  const playerIds = Object.keys(room.players);
-  const currentIndex = playerIds.indexOf(playerId);
-  const targetIndex = (currentIndex + 1) % playerIds.length;
-  const targetPlayerId = playerIds[targetIndex];
   const targetPlayer = room.players[targetPlayerId];
 
   if (!targetPlayer || targetPlayer.status !== 'active') {
     return {
       success: false,
-      message: 'No valid target for Freeze',
+      message: 'Invalid target for Freeze',
     };
   }
 
-  // Calculate target's current score
-  const { score } = calculateHandScore(targetPlayer.hand);
+  if (targetPlayerId === playerId) {
+    return {
+      success: false,
+      message: 'Cannot freeze yourself',
+    };
+  }
 
+  // Mark target as frozen for the remainder of this round
   const updatedPlayers: Record<string, Player> = {
     ...room.players,
     [playerId]: {
@@ -477,12 +603,12 @@ function handleFreezeAction(
     },
     [targetPlayerId]: {
       ...targetPlayer,
-      status: 'stayed' as PlayerStatus,
-      score: targetPlayer.score + score,
+      isFrozen: true, // Frozen for remainder of round
+      frozenUntilRound: room.round + 1, // Will be unfrozen when next round starts
     },
   };
 
-  const nextTurn = getNextActivePlayer(updatedPlayers, playerId);
+  const nextTurn = getNextActivePlayer(updatedPlayers, playerId, room.round);
 
   // Check if round should end
   if (shouldEndRound(updatedPlayers)) {
@@ -508,38 +634,42 @@ function handleFreezeAction(
 }
 
 /**
- * Handle Flip Three action card
+ * Handle Flip Three action card - draw 3 cards for target player
  */
-function handleFlipThreeAction(
+export function handleFlipThreeAction(
   room: Room,
   playerId: string,
+  targetPlayerId: string,
   newHand: Card[],
   remainingDeck: Card[]
 ): GameActionResult {
   const player = room.players[playerId];
-  
-  // Find target player (next player in turn order)
-  const playerIds = Object.keys(room.players);
-  const currentIndex = playerIds.indexOf(playerId);
-  const targetIndex = (currentIndex + 1) % playerIds.length;
-  const targetPlayerId = playerIds[targetIndex];
   const targetPlayer = room.players[targetPlayerId];
-
+  
   if (!targetPlayer || targetPlayer.status !== 'active') {
     return {
       success: false,
-      message: 'No valid target for Flip Three',
+      message: 'Invalid target for Flip Three',
     };
   }
 
-  // Draw 3 cards for target
+  if (targetPlayerId === playerId) {
+    return {
+      success: false,
+      message: 'Cannot target yourself with Flip Three',
+    };
+  }
+
+  // Draw 3 cards for the target player
   const cardsToDraw = Math.min(3, remainingDeck.length);
   const drawnCards: Card[] = [];
   let newDeck = [...remainingDeck];
 
   for (let i = 0; i < cardsToDraw; i++) {
     const { card, remainingDeck: deck } = dealOneCard(newDeck);
-    drawnCards.push(card);
+    // Make the card visible when dealt
+    const visibleCard = { ...card, isVisible: true };
+    drawnCards.push(visibleCard);
     newDeck = deck;
   }
 
@@ -572,7 +702,7 @@ function handleFlipThreeAction(
     },
   };
 
-  const nextTurn = getNextActivePlayer(updatedPlayers, playerId);
+  const nextTurn = getNextActivePlayer(updatedPlayers, playerId, room.round);
 
   return {
     success: true,
@@ -596,9 +726,10 @@ function handleFlipThreeAction(
 /**
  * Get the next active player in turn order
  */
-function getNextActivePlayer(
+export function getNextActivePlayer(
   players: Record<string, Player>,
-  currentPlayerId: string
+  currentPlayerId: string,
+  currentRound?: number
 ): string | null {
   const playerIds = Object.keys(players);
   const currentIndex = playerIds.indexOf(currentPlayerId);
@@ -610,10 +741,14 @@ function getNextActivePlayer(
     const nextPlayer = players[nextPlayerId];
     
     if (nextPlayer.status === 'active') {
+      // Check if player is frozen using round-based logic
+      if (nextPlayer.isFrozen && currentRound && nextPlayer.frozenUntilRound && currentRound < nextPlayer.frozenUntilRound) {
+        console.log(`❄️ ${nextPlayer.name} is frozen until round ${nextPlayer.frozenUntilRound}, skipping turn`);
+        continue; // Skip this player and check next
+      }
       return nextPlayerId;
     }
   }
-  
   return null; // No active players left
 }
 
@@ -638,34 +773,78 @@ function endRound(
   
   for (const [playerId, player] of Object.entries(players)) {
     if (player.status === 'active') {
-      // Active players get their current score
+      // Active players get their current score calculated
       const { score } = calculateHandScore(player.hand);
       finalPlayers[playerId] = {
         ...player,
         status: 'stayed',
-        score: player.score + score,
+        roundScore: score, // Set round score
+        totalScore: player.totalScore + score, // Add to total score
+      };
+    } else if (player.status === 'stayed') {
+      // Players who stayed get their round score added to total
+      finalPlayers[playerId] = {
+        ...player,
+        totalScore: player.totalScore + player.roundScore, // Add round score to total
       };
     } else {
-      finalPlayers[playerId] = player;
+      // Busted players get no points for this round
+      finalPlayers[playerId] = {
+        ...player,
+        roundScore: 0, // No round score for busted players
+      };
     }
   }
 
+  // Check for game over conditions (200+ points or max rounds reached)
+  const allPlayersSorted = Object.entries(finalPlayers)
+    .sort(([_, a], [__, b]) => {
+      // Primary sort: highest total score
+      if (b.totalScore !== a.totalScore) {
+        return b.totalScore - a.totalScore;
+      }
+      // Tie-breaker 1: highest round score (recent performance)
+      if (b.roundScore !== a.roundScore) {
+        return b.roundScore - a.roundScore;
+      }
+      // Tie-breaker 2: fewest cards in hand (better hand management)
+      return a.hand.length - b.hand.length;
+    });
+
+  const playersWith200Plus = allPlayersSorted.filter(([_, player]) => player.totalScore >= 200);
+  let gameWinner: string | undefined;
+  let gameState: 'roundEnd' | 'gameOver' = 'roundEnd';
+
+  // Game ends if someone reaches 200+ points OR max rounds reached
+  if (playersWith200Plus.length > 0 || room.round >= MAX_ROUNDS) {
+    gameState = 'gameOver';
+    // Winner is the player with highest score (using tie-breakers)
+    gameWinner = allPlayersSorted[0][0];
+    
+    console.log(`🏆 Game Over! Winner: ${finalPlayers[gameWinner].name} with ${finalPlayers[gameWinner].totalScore} points`);
+  }
+
   // Check if game should end (max rounds reached)
-  const shouldEndGame = room.round >= MAX_ROUNDS;
+  const shouldEndGame = room.round >= MAX_ROUNDS || gameState === 'gameOver';
 
   return {
     success: true,
-    message: winner ? `${players[winner].name} won with Flip 7!` : 'Round ended',
+    message: winner ? `${players[winner].name} won with Flip 7!` : 
+             gameWinner ? `${finalPlayers[gameWinner].name} wins with ${finalPlayers[gameWinner].totalScore} points!` :
+             'Round ended',
     updatedRoom: {
       ...room,
       players: finalPlayers,
       state: shouldEndGame ? 'gameOver' : 'roundEnd',
       currentTurn: null,
+      winner: gameWinner || winner, // Store the game winner
     },
     effects: [{
-      type: winner ? 'flip7' : 'stay',
-      targetPlayerId: winner,
-      message: winner ? 'Flip 7! Round won!' : 'Round ended',
+      type: winner ? 'flip7' : gameWinner ? 'gameOver' : 'stay',
+      targetPlayerId: gameWinner || winner,
+      message: winner ? 'Flip 7! Round won!' : 
+               gameWinner ? 'Game Over! Winner declared!' : 
+               'Round ended',
     }],
   };
 }
@@ -682,17 +861,7 @@ function shuffleDeck(deck: Card[]): Card[] {
   return shuffled;
 }
 
-/**
- * Utility function to deal one card
- */
-function dealOneCard(deck: Card[]): { card: Card; remainingDeck: Card[] } {
-  if (deck.length === 0) {
-    throw new Error('Cannot deal from empty deck');
-  }
-  const card = deck[0];
-  const remainingDeck = deck.slice(1);
-  return { card, remainingDeck };
-}
+
 
 /**
  * Get display name for a card

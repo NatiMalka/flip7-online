@@ -18,6 +18,7 @@ import {
 import { db } from './firebase';
 import type { Room, Player, Card, GameState, PlayerStatus, RoundHistory } from '../types';
 import { generateDeck } from '../utils/cardSystem';
+import { createAndShuffleDeck } from '../utils/cardSystem';
 
 // Collection names
 export const COLLECTIONS = {
@@ -37,7 +38,6 @@ export interface RoomDocument {
   currentTurn: string | null;
   createdAt: Timestamp;
   maxRounds: number;
-  isSoloMode: boolean;
   lastActivity: Timestamp;
 }
 
@@ -54,19 +54,21 @@ export interface PlayerDocument {
   hasFlip7: boolean;
   lastSeen: Timestamp;
   isConnected: boolean;
+  roundScore: number;
+  totalScore: number;
 }
 
 // Convert Room to RoomDocument for Firestore
 function roomToDocument(room: Room): RoomDocument {
+  const players: Record<string, PlayerDocument> = {};
+  for (const [playerId, player] of Object.entries(room.players)) {
+    players[playerId] = playerToDocument(player);
+  }
+  
   return {
     code: room.code,
     host: room.host,
-    players: Object.fromEntries(
-      Object.entries(room.players).map(([id, player]) => [
-        id,
-        playerToDocument(player),
-      ])
-    ),
+    players,
     deck: room.deck,
     discardPile: room.discardPile,
     round: room.round,
@@ -74,7 +76,6 @@ function roomToDocument(room: Room): RoomDocument {
     currentTurn: room.currentTurn,
     createdAt: Timestamp.fromDate(room.createdAt),
     maxRounds: room.maxRounds,
-    isSoloMode: room.isSoloMode,
     lastActivity: Timestamp.now(),
   };
 }
@@ -82,24 +83,23 @@ function roomToDocument(room: Room): RoomDocument {
 // Convert RoomDocument to Room
 function documentToRoom(doc: DocumentSnapshot, id: string): Room {
   const data = doc.data() as RoomDocument;
+  
+  const players: Record<string, Player> = {};
+  for (const [playerId, playerDoc] of Object.entries(data.players)) {
+    players[playerId] = documentToPlayer(playerDoc);
+  }
+  
   return {
-    id,
     code: data.code,
     host: data.host,
-    players: Object.fromEntries(
-      Object.entries(data.players).map(([id, playerDoc]) => [
-        id,
-        documentToPlayer(playerDoc),
-      ])
-    ),
+    players,
     deck: data.deck,
     discardPile: data.discardPile,
-    round: data.round,
-    state: data.state,
     currentTurn: data.currentTurn,
-    createdAt: data.createdAt.toDate(),
+    state: data.state,
+    round: data.round,
     maxRounds: data.maxRounds,
-    isSoloMode: data.isSoloMode,
+    createdAt: data.createdAt.toDate(),
   };
 }
 
@@ -117,6 +117,8 @@ function playerToDocument(player: Player): PlayerDocument {
     hasFlip7: player.hasFlip7,
     lastSeen: Timestamp.now(),
     isConnected: true,
+    roundScore: 0,
+    totalScore: 0,
   };
 }
 
@@ -127,11 +129,15 @@ function documentToPlayer(playerDoc: PlayerDocument): Player {
     name: playerDoc.name,
     hand: playerDoc.hand,
     score: playerDoc.score,
+    roundScore: playerDoc.roundScore || 0,
+    totalScore: playerDoc.totalScore || 0,
     status: playerDoc.status,
     history: playerDoc.history as RoundHistory[],
     joinedAt: playerDoc.joinedAt.toDate(),
     isHost: playerDoc.isHost,
     hasFlip7: playerDoc.hasFlip7,
+    isConnected: playerDoc.isConnected,
+    lastSeen: playerDoc.lastSeen.toDate(),
   };
 }
 
@@ -182,26 +188,28 @@ export async function createRoom(
     name: hostName,
     hand: [],
     score: 0,
+    roundScore: 0,
+    totalScore: 0,
     status: 'active',
     history: [],
     joinedAt: new Date(),
     isHost: true,
     hasFlip7: false,
+    isConnected: true,
+    lastSeen: new Date(),
   };
 
   const room: Room = {
-    id: roomCode,
     code: roomCode,
     host: hostId,
     players: { [hostId]: hostPlayer },
     deck: [],
     discardPile: [],
-    round: 0,
-    state: 'waiting',
     currentTurn: null,
+    state: 'waiting',
+    round: 0,
+    maxRounds: 10,
     createdAt: new Date(),
-    maxRounds: 5,
-    isSoloMode,
   };
 
   const roomRef = doc(db, COLLECTIONS.ROOMS, roomCode);
@@ -253,6 +261,8 @@ export async function joinRoom(
       hasFlip7: false,
       lastSeen: Timestamp.now(),
       isConnected: true,
+      roundScore: 0,
+      totalScore: 0,
     };
     
     const updatedPlayers = {
@@ -265,7 +275,32 @@ export async function joinRoom(
       lastActivity: Timestamp.now(),
     });
     
-    return documentToRoom(roomDoc, roomCode);
+    // Return the updated room data with the new player
+    const updatedRoomData: RoomDocument = {
+      ...roomData,
+      players: updatedPlayers,
+      lastActivity: Timestamp.now(),
+    };
+    
+    return {
+      id: roomCode,
+      code: updatedRoomData.code,
+      host: updatedRoomData.host,
+      players: Object.fromEntries(
+        Object.entries(updatedRoomData.players).map(([id, playerDoc]) => [
+          id,
+          documentToPlayer(playerDoc),
+        ])
+      ),
+      deck: updatedRoomData.deck,
+      discardPile: updatedRoomData.discardPile,
+      round: updatedRoomData.round,
+      state: updatedRoomData.state,
+      currentTurn: updatedRoomData.currentTurn,
+      createdAt: updatedRoomData.createdAt.toDate(),
+      maxRounds: updatedRoomData.maxRounds,
+      lastActivity: updatedRoomData.lastActivity.toDate(),
+    };
   });
 }
 
@@ -281,10 +316,37 @@ export async function getRoom(roomCode: string): Promise<Room | null> {
   return documentToRoom(roomDoc, roomCode);
 }
 
-// Update room
+// Update room with retry logic for better reliability
 export async function updateRoom(roomCode: string, updates: Partial<RoomDocument>): Promise<void> {
   const roomRef = doc(db, COLLECTIONS.ROOMS, roomCode);
-  await updateDoc(roomRef, { ...updates, lastActivity: Timestamp.now() });
+  
+  const updateData = {
+    ...updates,
+    lastActivity: Timestamp.now(),
+  };
+  
+  // Retry logic for handling concurrent updates
+  let retries = 0;
+  const maxRetries = 3;
+  
+  while (retries < maxRetries) {
+    try {
+      await updateDoc(roomRef, updateData);
+      return; // Success
+    } catch (error: any) {
+      retries++;
+      console.log(`🔄 Firebase update attempt ${retries}/${maxRetries} failed:`, error?.message);
+      
+      if (retries >= maxRetries) {
+        console.error('❌ All Firebase update attempts failed');
+        throw error;
+      }
+      
+      // Wait with exponential backoff before retrying
+      const delay = Math.min(200 * Math.pow(2, retries - 1), 2000);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
 }
 
 // Update player in room
@@ -411,14 +473,28 @@ export async function updatePlayerConnection(
   playerId: string,
   isConnected: boolean
 ): Promise<void> {
-  await updatePlayer(roomCode, playerId, { isConnected });
+  const roomRef = doc(db, COLLECTIONS.ROOMS, roomCode);
+  
+  // Use simple update instead of transaction for connection status
+  // This avoids conflicts with game state updates
+  await updateDoc(roomRef, {
+    [`players.${playerId}.isConnected`]: isConnected,
+    [`players.${playerId}.lastSeen`]: Timestamp.now(),
+    lastActivity: Timestamp.now(),
+  });
 }
 
 // Mark player as disconnected (for tab close detection)
 export async function markPlayerDisconnected(roomCode: string, playerId: string): Promise<void> {
-  await updatePlayer(roomCode, playerId, { 
-    isConnected: false,
-    status: 'disconnected' as PlayerStatus 
+  const roomRef = doc(db, COLLECTIONS.ROOMS, roomCode);
+  
+  // Use simple update instead of transaction for disconnection
+  // This avoids conflicts with game state updates
+  await updateDoc(roomRef, {
+    [`players.${playerId}.isConnected`]: false,
+    [`players.${playerId}.status`]: 'disconnected',
+    [`players.${playerId}.lastSeen`]: Timestamp.now(),
+    lastActivity: Timestamp.now(),
   });
 }
 
@@ -500,8 +576,8 @@ export async function startGame(roomCode: string): Promise<void> {
       throw new Error('Need at least 1 player to start');
     }
     
-    // Initialize game state
-    const shuffledDeck = generateDeck();
+    // Initialize game state with properly shuffled deck
+    const shuffledDeck = createAndShuffleDeck();
     const playerIds = Object.keys(roomData.players);
     const updatedPlayers = { ...roomData.players };
     
@@ -510,10 +586,17 @@ export async function startGame(roomCode: string): Promise<void> {
     for (const playerId of playerIds) {
       if (remainingDeck.length > 0) {
         const card = remainingDeck.shift()!;
+        // Deal face-up cards (isVisible: true)
+        const faceUpCard = {
+          ...card,
+          isVisible: true,
+        };
         updatedPlayers[playerId] = {
           ...updatedPlayers[playerId],
-          hand: [card],
+          hand: [faceUpCard],
           status: 'active',
+          roundScore: 0,
+          totalScore: 0,
           hasFlip7: false,
         };
       }
@@ -522,6 +605,7 @@ export async function startGame(roomCode: string): Promise<void> {
     transaction.update(roomRef, {
       players: updatedPlayers,
       deck: remainingDeck,
+      discardPile: [],
       round: 1,
       state: 'playing',
       currentTurn: playerIds[0],
@@ -611,4 +695,4 @@ export async function getRoomStats(roomCode: string): Promise<{
     currentRound: room.round,
     maxRounds: room.maxRounds,
   };
-} 
+}

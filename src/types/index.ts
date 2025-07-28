@@ -3,7 +3,7 @@ export type CardType = 'number' | 'action' | 'modifier';
 
 export type ActionCardType = 'freeze' | 'flipThree' | 'secondChance';
 
-export type ModifierCardType = 'plus2' | 'plus4' | 'plus6' | 'plus8' | 'plus10' | 'x2';
+export type ModifierCardType = 'plus4' | 'plus6' | 'plus8' | 'plus10' | 'x2';
 
 export interface Card {
   id: string;
@@ -12,7 +12,7 @@ export interface Card {
   action?: ActionCardType; // For action cards
   modifier?: ModifierCardType; // For modifier cards
   isFlipped: boolean;
-  isVisible: false;
+  isVisible: boolean;
 }
 
 // Player Types
@@ -23,6 +23,8 @@ export interface Player {
   name: string;
   hand: Card[];
   score: number;
+  roundScore: number; // Current round score (before modifiers)
+  totalScore: number; // Total accumulated score across all rounds
   status: PlayerStatus;
   history: RoundHistory[];
   joinedAt: Date;
@@ -30,6 +32,8 @@ export interface Player {
   hasFlip7: boolean;
   isConnected: boolean;
   lastSeen: Date;
+  isFrozen?: boolean; // Added for Freeze card functionality
+  frozenUntilRound?: number; // Round when player will be unfrozen
 }
 
 // Game State Types
@@ -45,19 +49,17 @@ export interface RoundHistory {
 
 // Room Types
 export interface Room {
-  id: string;
   code: string;
   host: string;
   players: Record<string, Player>;
   deck: Card[];
   discardPile: Card[];
-  round: number;
-  state: GameState;
   currentTurn: string | null;
-  createdAt: Date;
+  state: GameState;
+  round: number;
   maxRounds: number;
-  isSoloMode: boolean;
-  lastActivity: Date;
+  createdAt: Date;
+  winner?: string; // Store the game winner
 }
 
 // Game Actions
@@ -93,6 +95,8 @@ export interface ButtonProps {
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   onClick?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;

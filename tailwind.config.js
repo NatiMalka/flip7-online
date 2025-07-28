@@ -47,6 +47,15 @@ export default {
         'shake': 'shake 0.5s ease-in-out',
         'bounce-in': 'bounceIn 0.6s ease-out',
         'slide-in': 'slideIn 0.3s ease-out',
+        'cardFlip': 'cardFlip 0.6s ease-in-out',
+        'cardDeal': 'cardDeal 0.8s ease-out',
+        'cardHover': 'cardHover 0.3s ease-out',
+        'cardGlow': 'cardGlow 2s ease-in-out infinite',
+        'cardShake': 'cardShake 0.5s ease-in-out',
+        'cardBounce': 'cardBounce 1s ease-out',
+        'cardPulse': 'cardPulse 2s ease-in-out infinite',
+        'flip7Glow': 'flip7Glow 2s ease-in-out infinite',
+        'cardBackPattern': 'cardBackPattern 20s linear infinite',
       },
       keyframes: {
         flip: {

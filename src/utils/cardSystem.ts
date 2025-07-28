@@ -26,7 +26,6 @@ const CARD_DISTRIBUTION = {
   },
   // Modifier cards
   modifier: {
-    plus2: 2,     // 2 +2 cards
     plus4: 2,     // 2 +4 cards
     plus6: 2,     // 2 +6 cards
     plus8: 2,     // 2 +8 cards
@@ -105,7 +104,7 @@ export function dealCards(deck: Card[], count: number): { dealtCards: Card[], re
     throw new Error(`Cannot deal ${count} cards from deck with ${deck.length} cards`);
   }
 
-  const dealtCards = deck.slice(0, count);
+  const dealtCards = deck.slice(0, count).map(card => ({ ...card, isVisible: true })); // Make all dealt cards visible
   const remainingDeck = deck.slice(count);
 
   return { dealtCards, remainingDeck };
@@ -119,7 +118,7 @@ export function dealOneCard(deck: Card[]): { card: Card, remainingDeck: Card[] }
     throw new Error('Cannot deal from empty deck');
   }
 
-  const card = deck[0];
+  const card = { ...deck[0], isVisible: true }; // Make the card visible when dealt
   const remainingDeck = deck.slice(1);
 
   return { card, remainingDeck };
@@ -213,11 +212,6 @@ function getActionCardInfo(action: ActionCardType) {
  */
 function getModifierCardInfo(modifier: ModifierCardType) {
   const modifierInfo = {
-    plus2: {
-      displayName: '+2',
-      description: 'Add 2 points to your score',
-      color: '#2ed573',
-    },
     plus4: {
       displayName: '+4',
       description: 'Add 4 points to your score',
@@ -251,7 +245,7 @@ function getModifierCardInfo(modifier: ModifierCardType) {
 }
 
 /**
- * Calculate score for a hand of cards
+ * Calculate score for a hand of cards according to official Flip 7 rules
  */
 export function calculateHandScore(cards: Card[]): {
   score: number;
@@ -263,68 +257,79 @@ export function calculateHandScore(cards: Card[]): {
     flip7Bonus: number;
   };
 } {
-  let numberCards = 0;
-  let modifierMultiplier = 1;
-  const modifiers: ModifierCardType[] = [];
-  let hasFlip7 = false;
-
-  // Process each card
-  for (const card of cards) {
-    switch (card.type) {
-      case 'number':
-        if (card.value) {
-          numberCards += card.value;
-          if (card.value === 7) {
-            hasFlip7 = true;
-          }
-        }
-        break;
-
-      case 'modifier':
-        if (card.modifier) {
-          modifiers.push(card.modifier);
-          switch (card.modifier) {
-            case 'plus2':
-              numberCards += 2;
-              break;
-            case 'plus4':
-              numberCards += 4;
-              break;
-            case 'plus6':
-              numberCards += 6;
-              break;
-            case 'plus8':
-              numberCards += 8;
-              break;
-            case 'plus10':
-              numberCards += 10;
-              break;
-            case 'x2':
-              modifierMultiplier *= 2;
-              break;
-          }
-        }
-        break;
-
-      case 'action':
-        // Action cards don't affect score
-        break;
+  // Get only number cards for scoring
+  const numberCards = cards.filter(card => card.type === 'number');
+  
+  // Check for duplicates - if duplicates exist, score is 0 (busted)
+  const numbers = numberCards.map(card => card.value).filter((value): value is number => value !== undefined);
+  const uniqueNumbers = new Set(numbers);
+  
+  // If there are duplicates, score is 0 (busted)
+  if (numbers.length !== uniqueNumbers.size) {
+    return {
+      score: 0,
+      hasFlip7: false,
+      modifiers: [],
+      breakdown: {
+        numberCards: 0,
+        modifierMultiplier: 1,
+        flip7Bonus: 0,
+      },
+    };
+  }
+  
+  // Calculate score from unique number cards only
+  let numberCardsScore = 0;
+  
+  for (const card of numberCards) {
+    if (card.value !== undefined) {
+      numberCardsScore += card.value;
     }
   }
-
-  // Calculate final score
-  let finalScore = numberCards * modifierMultiplier;
   
-  // Add Flip 7 bonus (15 points)
+  // Check for Flip 7 (7 unique number cards)
+  const hasFlip7 = uniqueNumbers.size === 7;
+  
+  // Collect and apply modifier cards during play
+  const modifiers: ModifierCardType[] = [];
+  let modifierMultiplier = 1;
+  
+  for (const card of cards) {
+    if (card.type === 'modifier' && card.modifier) {
+      modifiers.push(card.modifier);
+      switch (card.modifier) {
+        case 'plus4':
+          numberCardsScore += 4;
+          break;
+        case 'plus6':
+          numberCardsScore += 6;
+          break;
+        case 'plus8':
+          numberCardsScore += 8;
+          break;
+        case 'plus10':
+          numberCardsScore += 10;
+          break;
+        case 'x2':
+          modifierMultiplier *= 2;
+          break;
+      }
+    }
+  }
+  
+  // Calculate final score (modifiers applied during play)
+  let finalScore = numberCardsScore * modifierMultiplier;
+  
+  // Add Flip 7 bonus (15 points) if 7 unique number cards
   const flip7Bonus = hasFlip7 ? 15 : 0;
   finalScore += flip7Bonus;
-
+  
   return {
     score: finalScore,
     hasFlip7,
     modifiers,
     breakdown: {
-      numberCards,
+      numberCards: numberCardsScore,
       modifierMultiplier,
       flip7Bonus,
     },

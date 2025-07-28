@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from './index';
+import { Button, TurnTimer, GameActionButtons, CardDeck, CardHand, TargetSelectionModal, ScoreDisplay, RoundSummary } from './index';
 import { useGame } from '../hooks/useGame';
 import type { Player, Card } from '../types';
 
@@ -14,16 +14,24 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
     hit, 
     stay, 
     leaveRoom,
+    selectTarget,
+    selectFlipThreeTarget,
+    startNextRound,
+    restartGame,
     canHit, 
     canStay, 
     isMyTurn,
     isLoading, 
-    error 
+    error,
+    requiresTargetSelection,
+    pendingAction
   } = useGame();
 
   const [showLeaveConfirm, setShowLeaveConfirm] = React.useState(false);
   const [flip7Celebration, setFlip7Celebration] = React.useState<string | null>(null);
-  const [bustAnimation, setBustAnimation] = React.useState<string | null>(null);
+  const [timeRemaining, setTimeRemaining] = React.useState(30000);
+  const [lastAction, setLastAction] = React.useState<string | null>(null);
+  const [showTargetSelection, setShowTargetSelection] = React.useState(false);
 
   // Check if current player is host
   const isHost = currentPlayer?.isHost || false;
@@ -41,22 +49,98 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
     });
   }, [room, currentPlayer?.id]);
 
-  // Handle game actions
-  const handleHit = async () => {
-    if (!canHit) return;
-    try {
-      await hit();
-    } catch (err) {
-      // Error handled by context
-    }
-  };
-
-  const handleStay = async () => {
+  // Handle timeout with proper callback
+  const handleTimeout = React.useCallback(async () => {
     if (!canStay) return;
+    setLastAction('Timeout - Auto Stay');
     try {
       await stay();
     } catch (err) {
       // Error handled by context
+    }
+  }, [canStay, stay]);
+
+  // Timer effect for turn countdown
+  React.useEffect(() => {
+    if (!isMyTurn || !room || room.state !== 'playing') return;
+
+    const interval = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 0) {
+          // Use setTimeout to avoid calling during setState
+          setTimeout(() => handleTimeout(), 0);
+          return 30000; // Reset timer
+        }
+        return prev - 100;
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isMyTurn, room?.state, handleTimeout]);
+
+  // Reset timer when turn changes
+  React.useEffect(() => {
+    if (room?.currentTurn) {
+      setTimeRemaining(30000);
+    }
+  }, [room?.currentTurn]);
+
+  // Show target selection modal when required
+  React.useEffect(() => {
+    if (requiresTargetSelection && (pendingAction === 'freeze' || pendingAction === 'flipThree')) {
+      setShowTargetSelection(true);
+    }
+  }, [requiresTargetSelection, pendingAction]);
+
+  // Handle game actions with debounce
+  const [isActionInProgress, setIsActionInProgress] = React.useState(false);
+  const hitInProgressRef = React.useRef(false);
+
+  const handleHit = React.useCallback(async () => {
+    console.log('🔴 GameBoard handleHit called');
+    console.log('🔴 canHit:', canHit);
+    console.log('🔴 isActionInProgress:', isActionInProgress);
+    console.log('🔴 hitInProgressRef.current:', hitInProgressRef.current);
+    
+    // Double check with ref to prevent race conditions
+    if (!canHit || isActionInProgress || hitInProgressRef.current) {
+      console.log('❌ Cannot hit - canHit:', canHit, 'isActionInProgress:', isActionInProgress, 'hitInProgressRef:', hitInProgressRef.current);
+      return;
+    }
+    
+    console.log('✅ Proceeding with hit action');
+    hitInProgressRef.current = true;
+    setIsActionInProgress(true);
+    setLastAction('Hit - Drawing card...');
+    
+    try {
+      console.log('🔄 Calling hit() function');
+      await hit();
+      console.log('✅ hit() function completed successfully');
+      setLastAction('Hit - Drew a card');
+    } catch (err) {
+      console.log('❌ hit() function failed:', err);
+      // Error handled by context
+    } finally {
+      console.log('🏁 Setting isActionInProgress to false');
+      hitInProgressRef.current = false;
+      setIsActionInProgress(false);
+    }
+  }, [canHit, isActionInProgress, hit]);
+
+  const handleStay = async () => {
+    if (!canStay || isActionInProgress) return;
+    
+    setIsActionInProgress(true);
+    setLastAction('Stay - Keeping current hand...');
+    
+    try {
+      await stay();
+      setLastAction('Stay - Hand locked');
+    } catch (err) {
+      // Error handled by context
+    } finally {
+      setIsActionInProgress(false);
     }
   };
 
@@ -70,43 +154,31 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
   React.useEffect(() => {
     if (!room) return;
     
-    Object.values(room.players).forEach(player => {
-      if (player.hasFlip7 && !flip7Celebration) {
-        setFlip7Celebration(player.id);
-        setTimeout(() => setFlip7Celebration(null), 5000); // 5 seconds celebration
-      }
-    });
-  }, [room, flip7Celebration]);
-
-  // Check for bust animations
-  React.useEffect(() => {
-    if (!room) return;
+    const checkFlip7 = () => {
+      Object.values(room.players).forEach(player => {
+        if (player.hasFlip7 && !flip7Celebration) {
+          setFlip7Celebration(player.id);
+          setTimeout(() => setFlip7Celebration(null), 5000); // 5 seconds celebration
+        }
+      });
+    };
     
-    Object.values(room.players).forEach(player => {
-      if (player.status === 'busted' && !bustAnimation) {
-        setBustAnimation(player.id);
-        setTimeout(() => setBustAnimation(null), 3000); // 3 seconds animation
-      }
-    });
-  }, [room, bustAnimation]);
+    // Use setTimeout to defer the state update
+    const timeoutId = setTimeout(checkFlip7, 0);
+    return () => clearTimeout(timeoutId);
+  }, [room, flip7Celebration]);
 
   if (!room) {
     return null;
   }
 
   return (
-    <div className="animated-bg" style={{
+    <div style={{
       minHeight: '100vh',
       position: 'relative',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)'
     }}>
-      {/* Floating Particles */}
-      <div className="particles">
-        {Array.from({ length: 20 }, (_, i) => (
-          <div key={i} className="particle" />
-        ))}
-      </div>
-
       {/* Main Game Board */}
       <div style={{
         display: 'flex',
@@ -114,6 +186,7 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
         position: 'relative',
         zIndex: 1
       }}>
+
         {/* Left Sidebar - Scoreboard */}
         <div style={{
           width: '280px',
@@ -169,6 +242,71 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
             </div>
           </div>
 
+          {/* Player Statistics */}
+          <div style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            borderRadius: '0.75rem',
+            padding: '1rem',
+            marginBottom: '1rem'
+          }}>
+            <div style={{
+              color: '#9ca3af',
+              fontSize: '0.875rem',
+              marginBottom: '0.75rem',
+              textAlign: 'center'
+            }}>
+              Player Status
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '0.5rem'
+            }}>
+              <div style={{
+                textAlign: 'center',
+                padding: '0.5rem',
+                backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                borderRadius: '0.5rem',
+                border: '1px solid rgba(34, 197, 94, 0.3)'
+              }}>
+                <div style={{ color: '#9ca3af', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                  Active
+                </div>
+                <div style={{ color: 'white', fontWeight: '600', fontSize: '1.125rem' }}>
+                  {sortedPlayers.filter(p => p.status === 'active').length}
+                </div>
+              </div>
+              <div style={{
+                textAlign: 'center',
+                padding: '0.5rem',
+                backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                borderRadius: '0.5rem',
+                border: '1px solid rgba(245, 158, 11, 0.3)'
+              }}>
+                <div style={{ color: '#9ca3af', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                  Stayed
+                </div>
+                <div style={{ color: 'white', fontWeight: '600', fontSize: '1.125rem' }}>
+                  {sortedPlayers.filter(p => p.status === 'stayed').length}
+                </div>
+              </div>
+              <div style={{
+                textAlign: 'center',
+                padding: '0.5rem',
+                backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                borderRadius: '0.5rem',
+                border: '1px solid rgba(239, 68, 68, 0.3)'
+              }}>
+                <div style={{ color: '#9ca3af', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                  Busted
+                </div>
+                <div style={{ color: 'white', fontWeight: '600', fontSize: '1.125rem' }}>
+                  {sortedPlayers.filter(p => p.status === 'busted').length}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Player Rankings */}
           <div style={{
             display: 'flex',
@@ -177,7 +315,7 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
             flex: 1
           }}>
             {sortedPlayers
-              .sort((a, b) => b.score - a.score) // Sort by score
+              .sort((a, b) => b.totalScore - a.totalScore) // Sort by total score
               .map((player, index) => (
                 <div
                   key={player.id}
@@ -256,13 +394,25 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
                           👑
                         </span>
                       )}
+                      {player.isFrozen && (
+                        <span style={{
+                          backgroundColor: '#60a5fa',
+                          color: 'white',
+                          fontSize: '0.625rem',
+                          padding: '0.125rem 0.375rem',
+                          borderRadius: '0.25rem',
+                          fontWeight: '500'
+                        }}>
+                          ❄️
+                        </span>
+                      )}
                     </div>
                     <div style={{
                       color: '#9ca3af',
                       fontSize: '0.75rem',
                       fontWeight: '600'
                     }}>
-                      {player.score} pts
+                      {player.totalScore} pts
                     </div>
                   </div>
                 </div>
@@ -325,32 +475,19 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
               </div>
             </div>
 
-            {/* Turn Indicator */}
-            {room.currentTurn && (
+            {/* Turn Timer - Top Right */}
+            {isMyTurn && room.state === 'playing' && (
               <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                padding: '0.75rem 1rem',
-                borderRadius: '0.75rem',
-                border: '1px solid rgba(59, 130, 246, 0.5)',
-                animation: isMyTurn ? 'pulse 2s infinite' : 'none'
+                maxWidth: '280px',
+                minWidth: '240px'
               }}>
-                <div style={{
-                  width: '0.75rem',
-                  height: '0.75rem',
-                  borderRadius: '50%',
-                  backgroundColor: isMyTurn ? '#10b981' : '#f59e0b',
-                  animation: isMyTurn ? 'pulse 1s infinite' : 'none'
-                }} />
-                <span style={{
-                  color: 'white',
-                  fontWeight: '600',
-                  fontSize: '0.875rem'
-                }}>
-                  {isMyTurn ? 'Your Turn!' : `${room.players[room.currentTurn]?.name}'s Turn`}
-                </span>
+                <TurnTimer
+                  timeRemaining={timeRemaining}
+                  totalTime={30000}
+                  isActive={isMyTurn}
+                  playerName={currentPlayer?.name || 'Unknown'}
+                  onTimeout={handleTimeout}
+                />
               </div>
             )}
           </div>
@@ -374,62 +511,52 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
                 position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.5rem'
+                gap: '1rem'
               }}>
                 {/* Deck */}
-                <div style={{
-                  width: '80px',
-                  height: '120px',
-                  backgroundColor: 'linear-gradient(135deg, #1e293b, #334155)',
-                  borderRadius: '0.5rem',
-                  border: '2px solid rgba(255, 255, 255, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontWeight: '600',
-                  fontSize: '0.875rem',
-                  boxShadow: '0 8px 25px rgba(0, 0, 0, 0.3)',
-                  position: 'relative'
-                }}>
-                  <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🃏</div>
-                    <div>{room.deck.length}</div>
-                  </div>
+                <div className="text-center">
+                  <CardDeck 
+                    cards={room.deck.map((_, i) => ({
+                      id: `deck-${i}`,
+                      type: 'number',
+                      value: 0,
+                      isFlipped: false,
+                      isVisible: false,
+                    }))}
+                    showCount={true}
+                  />
+                  <p className="text-white text-sm mt-2">Deck</p>
                 </div>
 
                 {/* Discard Pile */}
                 {room.discardPile.length > 0 && (
-                  <div style={{
-                    width: '80px',
-                    height: '120px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    borderRadius: '0.5rem',
-                    border: '2px solid rgba(255, 255, 255, 0.2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontWeight: '600',
-                    fontSize: '0.875rem',
-                    boxShadow: '0 8px 25px rgba(0, 0, 0, 0.3)'
-                  }}>
+                  <div className="text-center">
                     <div style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      textAlign: 'center'
+                      width: '80px',
+                      height: '120px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                      borderRadius: '0.5rem',
+                      border: '2px solid rgba(255, 255, 255, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      boxShadow: '0 8px 25px rgba(0, 0, 0, 0.3)'
                     }}>
-                      <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🗑️</div>
-                      <div>{room.discardPile.length}</div>
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🗑️</div>
+                        <div>{room.discardPile.length}</div>
+                      </div>
                     </div>
+                    <p className="text-white text-sm mt-2">Discard</p>
                   </div>
                 )}
               </div>
@@ -451,55 +578,48 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
                   isMyTurn={room.currentTurn === player.id}
                   isGameActive={room.state === 'playing'}
                   flip7Celebration={flip7Celebration === player.id}
-                  bustAnimation={bustAnimation === player.id}
                 />
               ))}
             </div>
 
-            {/* Action Buttons - Current Player Only */}
-            {isMyTurn && room.state === 'playing' && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                gap: '1rem',
-                marginTop: '2rem',
-                padding: '1rem',
-                backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                borderRadius: '1rem',
-                backdropFilter: 'blur(10px)'
-              }}>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={handleHit}
-                  disabled={!canHit || isLoading}
-                  style={{
-                    backgroundColor: 'rgba(220, 38, 38, 0.9)',
-                    backdropFilter: 'blur(10px)',
-                    minWidth: '120px',
-                    fontSize: '1.125rem',
-                    fontWeight: '600'
-                  }}
-                >
-                  {isLoading ? '...' : 'Hit'}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  onClick={handleStay}
-                  disabled={!canStay || isLoading}
-                  style={{
-                    backgroundColor: 'rgba(2, 132, 199, 0.9)',
-                    backdropFilter: 'blur(10px)',
-                    minWidth: '120px',
-                    fontSize: '1.125rem',
-                    fontWeight: '600'
-                  }}
-                >
-                  {isLoading ? '...' : 'Stay'}
-                </Button>
+            {/* Game Actions - Center Bottom */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '1rem',
+              marginTop: '2rem'
+            }}>
+              {/* Game Action Buttons */}
+              <div style={{ maxWidth: '500px', width: '100%' }}>
+                <GameActionButtons
+                  canHit={canHit && !isActionInProgress}
+                  canStay={canStay && !isActionInProgress}
+                  isMyTurn={isMyTurn}
+                  isLoading={isLoading || isActionInProgress}
+                  onHit={handleHit}
+                  onStay={handleStay}
+                  timeRemaining={timeRemaining}
+                  totalTime={30000}
+                />
               </div>
-            )}
+
+              {/* Last Action Display */}
+              {lastAction && (
+                <div style={{
+                  backgroundColor: 'rgba(59, 130, 246, 0.9)',
+                  color: 'white',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '0.5rem',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  textAlign: 'center',
+                  maxWidth: '400px'
+                }}>
+                  {lastAction}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -629,41 +749,38 @@ export function GameBoard({ onLeaveGame }: GameBoardProps) {
       )}
 
       {/* Bust Animation */}
-      {bustAnimation && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2000,
-          pointerEvents: 'none'
-        }}>
-          <div style={{
-            textAlign: 'center',
-            animation: 'shake 0.5s ease-in-out'
-          }}>
-            <div style={{
-              fontSize: '6rem',
-              marginBottom: '1rem',
-              animation: 'bounce 0.5s infinite'
-            }}>
-              💥
-            </div>
-            <div style={{
-              fontSize: '2.5rem',
-              fontWeight: '700',
-              color: '#ef4444',
-              textShadow: '0 4px 8px rgba(0, 0, 0, 0.5)'
-            }}>
-              BUST!
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Removed bust animation useEffect */}
+
+      {/* Target Selection Modal */}
+      <TargetSelectionModal
+        isOpen={showTargetSelection}
+        onClose={() => setShowTargetSelection(false)}
+        onSelectTarget={async (targetPlayerId) => {
+          setShowTargetSelection(false);
+          try {
+            if (pendingAction === 'freeze') {
+              await selectTarget(targetPlayerId);
+            } else if (pendingAction === 'flipThree') {
+              await selectFlipThreeTarget(targetPlayerId);
+            }
+          } catch (error) {
+            console.error('Failed to select target:', error);
+          }
+        }}
+        players={room.players}
+        currentPlayerId={currentPlayer?.id || ''}
+        actionType={pendingAction === 'freeze' ? 'freeze' : 'flipThree'}
+      />
+
+      {/* Round Summary Modal */}
+      <RoundSummary
+        isOpen={room?.state === 'roundEnd' || room?.state === 'gameOver'}
+        onClose={() => {}} // No close action for round summary
+        room={room!}
+        currentPlayerId={currentPlayer?.id || ''}
+        onStartNextRound={startNextRound}
+        onRestartGame={restartGame}
+      />
     </div>
   );
 }
@@ -675,7 +792,6 @@ interface PlayerAreaProps {
   isMyTurn: boolean;
   isGameActive: boolean;
   flip7Celebration: boolean;
-  bustAnimation: boolean;
 }
 
 function PlayerArea({ 
@@ -683,8 +799,7 @@ function PlayerArea({
   isCurrentPlayer, 
   isMyTurn, 
   isGameActive,
-  flip7Celebration,
-  bustAnimation 
+  flip7Celebration 
 }: PlayerAreaProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -707,24 +822,19 @@ function PlayerArea({
   };
 
   return (
-    <div style={{
-      backgroundColor: isCurrentPlayer ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255, 255, 255, 0.05)',
-      borderRadius: '1rem',
-      padding: '1.5rem',
-      border: isCurrentPlayer ? '2px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
-      backdropFilter: 'blur(10px)',
-      position: 'relative',
-      animation: isMyTurn ? 'pulse 2s infinite' : 'none',
-      transform: bustAnimation ? 'scale(1.05)' : 'scale(1)',
-      transition: 'transform 0.3s ease'
-    }}>
-      {/* Player Header */}
+    <div style={{ position: 'relative' }}>
+      {/* Player Info - Floating Outside */}
       <div style={{
+        position: 'absolute',
+        top: '1rem',
+        left: '0',
+        right: '0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: '1rem'
+        zIndex: 10
       }}>
+        {/* Player Name, Status, and Total Score */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -783,6 +893,28 @@ function PlayerArea({
                   TURN
                 </span>
               )}
+              {/* Frozen indicator */}
+              {player.isFrozen && (
+                <span style={{
+                  backgroundColor: '#60a5fa',
+                  color: 'white',
+                  fontSize: '0.75rem',
+                  padding: '0.125rem 0.5rem',
+                  borderRadius: '0.25rem',
+                  fontWeight: '500',
+                  marginLeft: '0.5rem'
+                }}>
+                  ❄️ FROZEN
+                </span>
+              )}
+              {/* Total Score alongside name */}
+              <span style={{
+                color: '#9ca3af',
+                fontSize: '0.75rem',
+                marginLeft: '0.5rem'
+              }}>
+                Total: {player.totalScore}
+              </span>
             </div>
             <div style={{
               display: 'flex',
@@ -802,197 +934,92 @@ function PlayerArea({
             </div>
           </div>
         </div>
-
-        {/* Current Round Score */}
-        <div style={{
-          textAlign: 'right'
-        }}>
-          <div style={{
-            color: '#9ca3af',
-            fontSize: '0.75rem',
-            marginBottom: '0.25rem'
-          }}>
-            Round Score
-          </div>
-          <div style={{
-            color: 'white',
-            fontWeight: '700',
-            fontSize: '1.25rem'
-          }}>
-            {player.hand.reduce((sum, card) => {
-              if (card.type === 'number' && card.value !== undefined) {
-                return sum + card.value;
-              }
-              return sum;
-            }, 0)}
-          </div>
-        </div>
       </div>
 
-      {/* Player Hand */}
+      {/* Player Hand Box - Focused on Cards */}
       <div style={{
+        backgroundColor: isCurrentPlayer ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+        borderRadius: '1rem',
+        padding: '2rem',
+        border: isCurrentPlayer ? '2px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(10px)',
+        position: 'relative',
+        animation: isMyTurn ? 'pulse 2s infinite' : 'none',
+        minHeight: '200px',
         display: 'flex',
-        gap: '0.5rem',
-        flexWrap: 'wrap',
+        alignItems: 'center',
         justifyContent: 'center'
       }}>
-        {player.hand.map((card, index) => (
-          <GameCard
-            key={`${player.id}-${index}`}
-            card={card}
-            isVisible={isCurrentPlayer || !isGameActive}
-            index={index}
-            flip7Celebration={flip7Celebration}
-          />
-        ))}
-        {player.hand.length === 0 && (
+        {/* Red overlay for busted players */}
+        {player.status === 'busted' && (
           <div style={{
-            width: '80px',
-            height: '120px',
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            borderRadius: '0.5rem',
-            border: '2px dashed rgba(255, 255, 255, 0.3)',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(239, 68, 68, 0.3)', // Red overlay
+            borderRadius: '1rem',
+            zIndex: 5,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            color: '#9ca3af',
-            fontSize: '0.875rem'
+            justifyContent: 'center'
           }}>
-            No Cards
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.9)',
+              color: 'white',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.5rem',
+              fontSize: '1.125rem',
+              fontWeight: '600',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              BUSTED!
+            </div>
           </div>
         )}
+        
+        {/* Blue overlay for frozen players */}
+        {player.isFrozen && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(96, 165, 250, 0.3)', // Blue overlay
+            borderRadius: '1rem',
+            zIndex: 5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <div style={{
+              backgroundColor: 'rgba(96, 165, 250, 0.9)',
+              color: 'white',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.5rem',
+              fontSize: '1.125rem',
+              fontWeight: '600',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              ❄️ FROZEN
+            </div>
+          </div>
+        )}
+        <CardHand
+          cards={player.hand}
+          isPlayerTurn={isMyTurn}
+          isActive={isGameActive}
+          showBack={false}
+          maxVisibleCards={5}
+          size="lg"
+        />
       </div>
     </div>
   );
 }
 
-// Game Card Component
-interface GameCardProps {
-  card: Card;
-  isVisible: boolean;
-  index: number;
-  flip7Celebration: boolean;
-}
-
-function GameCard({ card, isVisible, index, flip7Celebration }: GameCardProps) {
-  const getCardColor = (card: Card) => {
-    if (card.type === 'number') {
-      if (card.value === 7) return '#fbbf24'; // Flip 7 - Gold
-      if (card.value && card.value > 7) return '#ef4444'; // High numbers - Red
-      return '#10b981'; // Low numbers - Green
-    }
-    if (card.type === 'action') return '#3b82f6'; // Action cards - Blue
-    if (card.type === 'modifier') return '#8b5cf6'; // Modifier cards - Purple
-    return '#6b7280'; // Default - Gray
-  };
-
-  const getCardContent = (card: Card) => {
-    if (card.type === 'number') {
-      return {
-        value: card.value?.toString() || '?',
-        icon: card.value === 7 ? '🎯' : '🔢'
-      };
-    }
-    if (card.type === 'action') {
-      return {
-        value: card.action?.replace(/([A-Z])/g, ' $1').trim() || 'Action',
-        icon: '⚡'
-      };
-    }
-    if (card.type === 'modifier') {
-      return {
-        value: card.modifier?.toUpperCase() || 'Modifier',
-        icon: '✨'
-      };
-    }
-    return { value: '?', icon: '❓' };
-  };
-
-  const cardContent = getCardContent(card);
-  const cardColor = getCardColor(card);
-
-  return (
-    <div style={{
-      width: '80px',
-      height: '120px',
-      backgroundColor: isVisible ? cardColor : 'linear-gradient(135deg, #1e293b, #334155)',
-      borderRadius: '0.5rem',
-      border: '2px solid rgba(255, 255, 255, 0.2)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'white',
-      fontWeight: '600',
-      fontSize: '0.875rem',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      transform: `rotateY(${isVisible ? '0deg' : '180deg'})`,
-      animation: flip7Celebration && card.value === 7 ? 'bounce 0.5s infinite' : 'none',
-      position: 'relative',
-      zIndex: index
-    }}
-    onMouseEnter={(e) => {
-      if (isVisible) {
-        e.currentTarget.style.transform = 'translateY(-10px) scale(1.05)';
-        e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.4)';
-      }
-    }}
-    onMouseLeave={(e) => {
-      if (isVisible) {
-        e.currentTarget.style.transform = 'translateY(0) scale(1)';
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
-      }
-    }}
-    >
-      {isVisible ? (
-        <>
-          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>
-            {cardContent.icon}
-          </div>
-          <div style={{ 
-            fontSize: card.value === 7 ? '1.25rem' : '1rem',
-            fontWeight: card.value === 7 ? '700' : '600',
-            textAlign: 'center',
-            lineHeight: '1.2'
-          }}>
-            {cardContent.value}
-          </div>
-          {card.value === 7 && (
-            <div style={{
-              position: 'absolute',
-              top: '-0.5rem',
-              right: '-0.5rem',
-              backgroundColor: '#fbbf24',
-              color: 'black',
-              borderRadius: '50%',
-              width: '1.5rem',
-              height: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '0.75rem',
-              fontWeight: '700'
-            }}>
-              ★
-            </div>
-          )}
-        </>
-      ) : (
-        <div style={{
-          width: '100%',
-          height: '100%',
-          background: 'linear-gradient(135deg, #1e293b, #334155)',
-          borderRadius: '0.375rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '1.5rem'
-        }}>
-          🃏
-        </div>
-      )}
-    </div>
-  );
-} 
+ 

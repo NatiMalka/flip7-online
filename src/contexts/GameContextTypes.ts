@@ -23,6 +23,8 @@ export interface GameContextState {
   showGameOver: boolean;
   showRoundEnd: boolean;
   lastAction: string | null;
+  requiresTargetSelection?: boolean;
+  pendingAction?: 'freeze' | 'flipThree' | 'secondChance' | 'gameOver' | 'stay' | 'bust' | 'flip7' | null;
 }
 
 // Game Actions
@@ -33,7 +35,7 @@ export type GameContextAction =
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_CONNECTION_STATUS'; payload: { isConnected: boolean; isReconnecting?: boolean } }
   | { type: 'SET_GAME_ACTIONS'; payload: { canHit: boolean; canStay: boolean; isMyTurn: boolean } }
-  | { type: 'SET_UI_STATE'; payload: { showGameOver?: boolean; showRoundEnd?: boolean; lastAction?: string | null } }
+  | { type: 'SET_UI_STATE'; payload: { showGameOver?: boolean; showRoundEnd?: boolean; lastAction?: string | null; requiresTargetSelection?: boolean; pendingAction?: 'freeze' | 'flipThree' | 'secondChance' | 'gameOver' | 'stay' | 'bust' | 'flip7' | null } }
   | { type: 'CLEAR_ERROR' }
   | { type: 'RESET_STATE' };
 
@@ -50,7 +52,11 @@ export interface GameContextType extends GameContextState {
   // Game actions
   hit: () => Promise<void>;
   stay: () => Promise<void>;
+  selectTarget: (targetPlayerId: string) => Promise<void>;
+  selectFlipThreeTarget: (targetPlayerId: string) => Promise<void>;
   startGame: () => Promise<void>;
+  startNextRound: () => Promise<void>;
+  restartGame: () => Promise<void>;
   
   // Utility
   clearError: () => void;

@@ -4,6 +4,9 @@ import { GameBoard } from './components/GameBoard';
 import { GameProvider } from './contexts/GameContext';
 import { useGame } from './hooks/useGame';
 import { ConnectionStatus } from './components/ConnectionStatus';
+import CardDemo from './components/CardDemo';
+import TurnBasedGameDemo from './components/TurnBasedGameDemo';
+
 
 function AppContent() {
   const [isJoinModalOpen, setIsJoinModalOpen] = React.useState(false);

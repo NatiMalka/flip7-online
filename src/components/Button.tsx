@@ -6,6 +6,8 @@ const Button: React.FC<ButtonProps> = ({
   size = 'md',
   disabled = false,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
   children,
   className = '',
   style,
@@ -69,6 +71,7 @@ const Button: React.FC<ButtonProps> = ({
         e.currentTarget.style.backgroundColor = '#15803d';
       }
     }
+    onMouseEnter?.();
   };
 
   const handleMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -84,6 +87,7 @@ const Button: React.FC<ButtonProps> = ({
         e.currentTarget.style.backgroundColor = '#16a34a';
       }
     }
+    onMouseLeave?.();
   };
   
   return (

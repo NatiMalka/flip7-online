@@ -1,13 +1,13 @@
 import { 
   generateDeck, 
   shuffleDeck, 
-  dealCards, 
+  dealCards,
   dealOneCard, 
-  detectCardType, 
-  calculateHandScore, 
+  calculateHandScore,
+  createAndShuffleDeck,
+  detectCardType,
   isHandBusted,
-  getCardDisplayInfo,
-  createAndShuffleDeck 
+  getCardDisplayInfo
 } from './cardSystem';
 import type { Card } from '../types';
 
@@ -53,8 +53,7 @@ console.log('\n6. Testing score calculation...');
 const testHand: Card[] = [
   { id: 'test1', type: 'number', value: 3, isFlipped: true, isVisible: true },
   { id: 'test2', type: 'number', value: 4, isFlipped: true, isVisible: true },
-  { id: 'test3', type: 'modifier', modifier: 'plus2', isFlipped: true, isVisible: true },
-  { id: 'test4', type: 'modifier', modifier: 'x2', isFlipped: true, isVisible: true },
+  { id: 'test3', type: 'modifier', modifier: 'x2', isFlipped: true, isVisible: true },
 ];
 const score = calculateHandScore(testHand);
 console.log(`   ✅ Hand score: ${score.score} (${score.breakdown.numberCards} + ${score.breakdown.modifierMultiplier}x + ${score.breakdown.flip7Bonus} bonus)`);
@@ -86,6 +85,38 @@ console.log(`   ✅ Display info: ${displayInfo.displayName} - ${displayInfo.des
 console.log('\n10. Testing create and shuffle...');
 const newDeck = createAndShuffleDeck();
 console.log(`   ✅ Created and shuffled deck with ${newDeck.length} cards`);
+
+// Test 11: Verify different cards are dealt
+console.log('\n11. Testing that different cards are dealt...');
+const deck1 = createAndShuffleDeck();
+const deck2 = createAndShuffleDeck();
+
+const cards1 = [];
+const cards2 = [];
+let remaining1 = [...deck1];
+let remaining2 = [...deck2];
+
+for (let i = 0; i < 5; i++) {
+  const { card: card1, remainingDeck: newDeck1 } = dealOneCard(remaining1);
+  const { card: card2, remainingDeck: newDeck2 } = dealOneCard(remaining2);
+  
+  cards1.push(card1);
+  cards2.push(card2);
+  
+  remaining1 = newDeck1;
+  remaining2 = newDeck2;
+}
+
+const cardIds1 = cards1.map(card => card.id);
+const cardIds2 = cards2.map(card => card.id);
+const differentCards = cardIds1.filter((id, index) => id !== cardIds2[index]);
+console.log(`   ✅ Different cards dealt: ${differentCards.length} out of 5 cards are different`);
+
+// Test 12: Verify that dealt cards are visible
+console.log('\n12. Testing card visibility...');
+const { card: visibleCard, remainingDeck: finalDeck } = dealOneCard(testHand);
+console.log(`   ✅ Dealt card visibility: ${visibleCard.isVisible ? 'Visible' : 'Hidden'} (should be Visible)`);
+console.log(`   📊 Card details: ${visibleCard.id} - ${visibleCard.type} card`);
 
 console.log('\n🎉 All card system tests completed successfully!');
 console.log('\n📋 Summary of implemented features:');

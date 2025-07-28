@@ -47,7 +47,32 @@ Building a modern, responsive desktop web version of "Flip 7" card game with rea
 ## Phase 2: Core Game Logic & Data Models (Week 2)
 
 ### Task 2.1: Card System Implementation
-- [x] Define card frequency distribution according to official rules (e.g., 12 has x12, 11 has x11, etc.)
+- [x] Define card frequency distribution according to official rules:
+  - Number Cards:
+    - 0 ×1
+    - 1 ×2
+    - 2 ×3
+    - 3 ×4
+    - 4 ×5
+    - 5 ×6
+    - 6 ×7
+    - 7 ×8
+    - 8 ×9
+    - 9 ×10
+    - 10 ×11
+    - 11 ×12
+    - 12 ×13
+  - Action Cards:
+    - Freeze ×3
+    - Flip Three ×3
+    - Second Chance ×3
+  - Modifier Cards:
+    - +2 ×2
+    - +4 ×2
+    - +6 ×2
+    - +8 ×2
+    - +10 ×2
+    - ×2 multiplier ×3
 - [x] Create card deck generation logic using the defined distribution
 - [x] Implement card shuffling algorithm
 - [x] Create card dealing logic
@@ -55,51 +80,52 @@ Building a modern, responsive desktop web version of "Flip 7" card game with rea
 - [x] Create card scoring logic
 
 
+
 ### Task 2.2: Game Rules Engine
-- [x] Implement Flip 7 detection logic
-- [x] Create bust detection (sum > 7)
-- [x] Implement Action card effects (Freeze, Flip Three, Second Chance)
-- [x] Create Modifier card effects (x2, etc.)
-- [x] Implement round end conditions
+- [ ] Implement Flip 7 detection logic
+- [ ] Create bust detection (sum > 7)
+- [ ] Implement Action card effects (Freeze, Flip Three, Second Chance)
+- [ ] Create Modifier card effects (x2, etc.)
+- [ ] Implement round end conditions
 
 ### Task 2.3: Firebase Data Models
-- [x] Set up Firestore collections structure
-- [x] Create room creation/joining logic
-- [x] Implement player management functions
-- [x] Set up real-time listeners for game state
-- [x] Create data validation rules
+- [ ] Set up Firestore collections structure
+- [ ] Create room creation/joining logic
+- [ ] Implement player management functions
+- [ ] Set up real-time listeners for game state
+- [ ] Create data validation rules
 
 ### Task 2.4: Game State Management
-- [x] Create React Context for game state
-- [x] Implement Firebase real-time synchronization
-- [x] Create game state update functions
-- [x] Implement error handling for network issues
-- [x] Add reconnection logic
+- [ ] Create React Context for game state
+- [ ] Implement Firebase real-time synchronization
+- [ ] Create game state update functions
+- [ ] Implement error handling for network issues
+- [ ] Add reconnection logic
 
 ---
 
 ## Phase 3: User Interface - Core Views (Week 3)
 
 ### Task 3.1: Home/Landing Page
-- [x] Create welcome screen with game title
-- [x] Implement name input form
-- [x] Create room code input/join functionality
-- [x] Add "Solo Mode" button
-- [x] Implement form validation and error handling
+- [ ] Create welcome screen with game title
+- [ ] Implement name input form
+- [ ] Create room code input/join functionality
+- [ ] Add "Solo Mode" button
+- [ ] Implement form validation and error handling
 
 ### Task 3.2: Lobby System
-- [x] Create lobby waiting room UI
-- [x] Implement real-time player list display
-- [x] Add host controls (start game button)
-- [x] Create room code display and copy functionality
-- [x] Implement player ready status indicators
+- [ ] Create lobby waiting room UI
+- [ ] Implement real-time player list display
+- [ ] Add host controls (start game button)
+- [ ] Create room code display and copy functionality
+- [ ] Implement player ready status indicators
 
 ### Task 3.3: Game Board Layout
-- [x] Design main game board layout
-- [x] Create deck visualization
-- [x] Implement player hand display
-- [x] Add other players' status display
-- [x] Create game action buttons (Hit/Stay)
+- [ ] Design main game board layout
+- [ ] Create deck visualization
+- [ ] Implement player hand display
+- [ ] Add other players' status display
+- [ ] Create game action buttons (Hit/Stay)
 
 ### Task 3.4: Card Visual Components
 - [ ] Design and implement card visual design
@@ -113,11 +139,11 @@ Building a modern, responsive desktop web version of "Flip 7" card game with rea
 ## Phase 4: Gameplay Implementation (Week 4)
 
 ### Task 4.1: Turn-Based Gameplay
-- [ ] Implement turn order system
-- [ ] Create Hit/Stay button functionality
-- [ ] Add card dealing animations
-- [ ] Implement player status updates (active, stayed, busted)
-- [ ] Create round progression logic
+- [x] Implement turn order system
+- [x] Create Hit/Stay button functionality
+- [x] Add card dealing animations
+- [x] Implement player status updates (active, stayed, busted)
+- [x] Create round progression logic
 
 ### Task 4.2: Action & Modifier Cards
 - [ ] Implement Freeze card effect
